@@ -1,7 +1,7 @@
 # Engine Simulator
 
-> **This fork (`elriando/engine-sim`, branch `feat/cli-audio-export`)** adds a headless **CLI audio exporter** for NEODRIVE engine loops.  
-> **Install & usage:** see **[README-CLI-AUDIO-EXPORT.md](README-CLI-AUDIO-EXPORT.md)** — interactive `.\export-audio.cmd`, catalog import, build steps.
+> **Fork `feat/cli-audio-export`** — headless **NEODRIVE** engine audio exporter for [lil-drift](https://github.com/elriando/lil-drift).  
+> **Start here:** **[README-CLI-AUDIO-EXPORT.md](README-CLI-AUDIO-EXPORT.md)** (build, `.\export-audio.cmd`, engine library, lil-drift copy).
 
 ![Alt text](docs/public/screenshots/screenshot_v01.png?raw=true)
 ---
