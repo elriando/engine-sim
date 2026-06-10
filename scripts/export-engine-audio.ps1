@@ -46,9 +46,9 @@ function Get-EngineNodeId([string]$MrPath) {
     $engineNodeCandidates = New-Object System.Collections.Generic.List[string]
 
     for ($i = 0; $i -lt $lines.Count; $i++) {
-        if ($lines[$i] -notmatch '^\s*public\s+node\s+(\S+)') { continue }
+        if ($lines[$i] -notmatch '^\s*(private|public)\s+node\s+(\S+)') { continue }
 
-        $node = $Matches[1]
+        $node = $Matches[2]
         if ($node -eq 'main') { continue }
 
         $block = Read-NodeBlock $lines $i
@@ -57,7 +57,7 @@ function Get-EngineNodeId([string]$MrPath) {
         if ($block.Text -match 'alias\s+output\s+__out:\s*engine\b') {
             return $node
         }
-        if ($block.Text -match '(?m)^\s*engine\s+engine\s*\(') {
+        if ($block.Text -match '(?m)^\s*(engine\s+engine|wankel_engine\s+engine)\s*\(') {
             [void]$engineNodeCandidates.Add($node)
         }
     }
@@ -67,6 +67,20 @@ function Get-EngineNodeId([string]$MrPath) {
     }
 
     return [System.IO.Path]::GetFileNameWithoutExtension($MrPath)
+}
+
+function Test-CatalogEngineSupported([string]$Script) {
+    if ($Script -match '\bwankel_engine\b') {
+        return @{
+            Supported = $false
+            Reason = @(
+                'Rotary / Wankel engines are not supported by this engine-sim build (no wankel_engine in the compiler).'
+                'Catalog part #2906 (13-B) cannot be exported here.'
+                'Use piston JDM engines instead (SR20, RB26, 2JZ, EJ25, Honda VTEC).'
+            ) -join ' '
+        }
+    }
+    return @{ Supported = $true; Reason = '' }
 }
 
 function Get-EngineScripts {
@@ -176,6 +190,11 @@ function Import-CatalogEngine([string]$UrlOrId) {
     $part = Invoke-RestMethod -Uri $apiUrl -UseBasicParsing
     if (-not $part.script) {
         throw "This catalog entry has no exportable engine script."
+    }
+
+    $support = Test-CatalogEngineSupported $part.script
+    if (-not $support.Supported) {
+        throw $support.Reason
     }
 
     $scriptName = if ($part.script_name) { $part.script_name } else { "part_$partId.mr" }
