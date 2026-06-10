@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.10)
 option(DTV "Enable video output" OFF)
 option(PIRANHA_ENABLED "Enable scripting input" ON)
 option(DISCORD_ENABLED "Enable Discord Rich Presence" ON)
+option(ENGINE_SIM_CLI "Build headless CLI audio exporter" ON)
 
 if (DTV)
     add_compile_definitions(ATG_ENGINE_SIM_VIDEO_CAPTURE)
@@ -87,6 +88,7 @@ add_library(engine-sim STATIC
     src/vehicle.cpp
     src/vehicle_drag_constraint.cpp
     src/vtec_valvetrain.cpp
+    src/wav_io.cpp
 
     # Include files
     include/audio_buffer.h
@@ -132,6 +134,7 @@ add_library(engine-sim STATIC
     include/vehicle.h
     include/vehicle_drag_constraint.h
     include/vtec_valvetrain.h
+    include/wav_io.h
 )
 
 target_link_libraries(engine-sim
@@ -299,6 +302,21 @@ endif (DISCORD_ENABLED)
 target_include_directories(engine-sim-app
     PUBLIC dependencies/submodules)
 
+if (ENGINE_SIM_CLI AND PIRANHA_ENABLED)
+    add_executable(engine-sim-cli
+        src/engine_sim_cli_main.cpp
+        src/cli_audio_export.cpp
+    )
+
+    target_link_libraries(engine-sim-cli
+        engine-sim
+        engine-sim-script-interpreter
+    )
+
+    target_include_directories(engine-sim-cli
+        PUBLIC dependencies/submodules)
+endif ()
+
 add_subdirectory(dependencies)
 
 # GTEST
@@ -310,12 +328,20 @@ add_executable(engine-sim-test
     test/gas_system_tests.cpp
     test/function_test.cpp
     test/synthesizer_tests.cpp
+    test/cli_audio_golden_test.cpp
+    test/cli_export_golden_test.cpp
+    src/cli_audio_export.cpp
 )
 
 target_link_libraries(engine-sim-test
     gtest_main
     engine-sim
 )
+
+if (PIRANHA_ENABLED)
+    target_link_libraries(engine-sim-test
+        engine-sim-script-interpreter)
+endif (PIRANHA_ENABLED)
 
 include(GoogleTest)
 gtest_discover_tests(engine-sim-test)

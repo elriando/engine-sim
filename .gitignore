@@ -10,3 +10,9 @@ compile_commands.json
 
 # Blender temporary files
 *.blend1
+
+# CLI export artifacts
+export/
+out/
+error_log.log
+**/_cli_export_main.mr
