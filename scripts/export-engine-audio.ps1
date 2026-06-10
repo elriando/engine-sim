@@ -43,18 +43,29 @@ function Exit-Cancelled([string]$Message = 'Cancelled.') {
 
 function Get-EngineNodeId([string]$MrPath) {
     $lines = Get-Content -LiteralPath $MrPath
+    $engineNodeCandidates = New-Object System.Collections.Generic.List[string]
+
     for ($i = 0; $i -lt $lines.Count; $i++) {
-        if ($lines[$i] -match '^\s*public\s+node\s+(\S+)\s*\{') {
-            $node = $Matches[1]
-            if ($node -eq 'main') { continue }
-            $end = [Math]::Min($i + 50, $lines.Count - 1)
-            for ($j = $i; $j -le $end; $j++) {
-                if ($lines[$j] -match '^\s*engine\s+engine\s*\(') {
-                    return $node
-                }
-            }
+        if ($lines[$i] -notmatch '^\s*public\s+node\s+(\S+)') { continue }
+
+        $node = $Matches[1]
+        if ($node -eq 'main') { continue }
+
+        $block = Read-NodeBlock $lines $i
+        $i = $block.NextIndex - 1
+
+        if ($block.Text -match 'alias\s+output\s+__out:\s*engine\b') {
+            return $node
+        }
+        if ($block.Text -match '(?m)^\s*engine\s+engine\s*\(') {
+            [void]$engineNodeCandidates.Add($node)
         }
     }
+
+    if ($engineNodeCandidates.Count -gt 0) {
+        return $engineNodeCandidates[0]
+    }
+
     return [System.IO.Path]::GetFileNameWithoutExtension($MrPath)
 }
 
