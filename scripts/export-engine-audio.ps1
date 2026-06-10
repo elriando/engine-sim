@@ -70,41 +70,71 @@ function Get-EngineScripts {
         Sort-Object FullName
 }
 
+function Should-SkipCatalogNode([string]$NodeName, [string]$BlockText) {
+    if ($NodeName -eq 'main') { return $true }
+    if ($BlockText -match '\bvehicle\s*\(') { return $true }
+    if ($BlockText -match '\btransmission\s*\(') { return $true }
+    if ($BlockText -match '\brun\s*\(') { return $true }
+    return $false
+}
+
+function Read-NodeBlock([string[]]$Lines, [int]$StartIndex) {
+    $block = New-Object System.Collections.Generic.List[string]
+    $block.Add($Lines[$StartIndex])
+    $depth = Count-BraceDepth $Lines[$StartIndex]
+    $i = $StartIndex + 1
+
+    if ($depth -eq 0) {
+        while ($i -lt $Lines.Count) {
+            $block.Add($Lines[$i])
+            $depth += Count-BraceDepth $Lines[$i]
+            $i++
+            if ($depth -le 0) { break }
+        }
+    }
+    else {
+        while ($i -lt $Lines.Count -and $depth -gt 0) {
+            $block.Add($Lines[$i])
+            $depth += Count-BraceDepth $Lines[$i]
+            $i++
+        }
+    }
+
+    return @{
+        Lines = $block
+        NextIndex = $i
+        Text = ($block -join "`n")
+    }
+}
+
 function Repair-CatalogScript([string]$Script) {
     # Catalog scripts often target a newer engine-sim (vehicle/run/convolution).
-    # Keep only the engine definition for headless CLI export.
+    # Strip GUI-only nodes and unsupported engine fields for headless CLI export.
     $lines = $Script -split "`r?`n"
     $result = New-Object System.Collections.Generic.List[string]
-    $skip = $false
-    $depth = 0
+    $i = 0
 
-    foreach ($line in $lines) {
-        if (-not $skip) {
-            if ($line -match '^\s*private\s+node\s+\w+') {
-                if ($line -match '^\s*private\s+node\s+(nissan_skyline|fs5r30a)\b') {
-                    $skip = $true
-                    $depth = Count-BraceDepth $line
-                    if ($depth -le 0) { $skip = $false; $depth = 0 }
-                    continue
+    while ($i -lt $lines.Count) {
+        $line = $lines[$i]
+
+        if ($line -match '^\s*(private|public)\s+node\s+(\S+)') {
+            $nodeName = $Matches[2]
+            $block = Read-NodeBlock $lines $i
+            $i = $block.NextIndex
+
+            if (-not (Should-SkipCatalogNode $nodeName $block.Text)) {
+                foreach ($bl in $block.Lines) {
+                    if ($bl -match '^\s*(convolution|block_temperature|max_brake_force)\s*:') { continue }
+                    $result.Add($bl)
                 }
             }
-            if ($line -match '^\s*public\s+node\s+main\s*\{') {
-                $skip = $true
-                $depth = Count-BraceDepth $line
-                if ($depth -le 0) { $skip = $false; $depth = 0 }
-                continue
-            }
-            if ($line -match '^\s*main\s*\(\s*\)\s*$') { continue }
-            if ($line -match '^\s*(convolution|block_temperature|max_brake_force)\s*:') { continue }
-            $result.Add($line)
+            continue
         }
-        else {
-            $depth += Count-BraceDepth $line
-            if ($depth -le 0) {
-                $skip = $false
-                $depth = 0
-            }
-        }
+
+        if ($line -match '^\s*main\s*\(\s*\)\s*$') { $i++; continue }
+        if ($line -match '^\s*(convolution|block_temperature|max_brake_force)\s*:') { $i++; continue }
+        $result.Add($line)
+        $i++
     }
 
     return (($result -join "`n").TrimEnd() + "`n")
