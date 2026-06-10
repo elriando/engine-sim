@@ -1,7 +1,7 @@
 # Engine Simulator
 
-> **Fork `feat/cli-audio-export`** — headless **NEODRIVE** engine audio exporter for [lil-drift](https://github.com/elriando/lil-drift).  
-> **Start here:** **[README-CLI-AUDIO-EXPORT.md](README-CLI-AUDIO-EXPORT.md)** (build, `.\export-audio.cmd`, engine library, lil-drift copy).
+> **Fork `feat/cli-audio-export`** — public **NEODRIVE** engine audio exporter for [engine-sim](https://github.com/ange-yaghi/engine-sim). Automates the workflow from [sevencrane's NEODRIVE sound guide](https://sevencrane.itch.io/neodrive/devlog/1322297/how-to-make-car-sound).  
+> **Start here:** **[README-CLI-AUDIO-EXPORT.md](README-CLI-AUDIO-EXPORT.md)** — build, `.\export-audio.cmd`, output format, runtime blending.
 
 ![Alt text](docs/public/screenshots/screenshot_v01.png?raw=true)
 ---

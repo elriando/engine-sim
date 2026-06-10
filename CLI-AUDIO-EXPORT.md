@@ -1,42 +1,33 @@
-# CLI audio export (NEODRIVE)
+# CLI audio export (technical)
 
-Headless export of engine-sim PCM audio into NEODRIVE loop sets for [lil-drift](https://github.com/elriando/lil-drift).
+Headless NEODRIVE export for [engine-sim](https://github.com/ange-yaghi/engine-sim). Automates the manual pipeline from [How To Make Car Sound](https://sevencrane.itch.io/neodrive/devlog/1322297/how-to-make-car-sound) (dyno hold, idle/gas pairs, seamless loops).
 
-## Overview
+## Pipeline
 
-`engine-sim-cli` loads an engine `.mr` script, holds RPM on the dyno (`HOLD` + programmatic throttle), captures **internal synthesizer PCM** (not WASAPI), applies a crossfade loop, and writes mono 16-bit WAV files plus `manifest.json`.
+`engine-sim-cli` loads an engine `.mr` script, holds RPM on the dyno, captures **internal synthesizer PCM** (not WASAPI), applies a crossfade loop, and writes mono 16-bit WAV files plus optional `manifest.json`.
 
-Each RPM tier produces two files:
+Per RPM tier:
 
 ```
 {id}_{rpm}_off.wav   # throttle released
 {id}_{rpm}_on.wav    # throttle fully pressed
 ```
 
-## Interactive export (recommended)
-
-From the repo root:
+## Interactive export
 
 ```cmd
-export-audio.cmd
+.\export-audio.cmd
 ```
 
-Interactive menu:
-
-1. **Local** — lists every engine `.mr` under `assets/engines/`
-2. **Catalog** — paste a link from [catalog.engine-sim.parts](https://catalog.engine-sim.parts/) (e.g. `https://catalog.engine-sim.parts/parts/2531`); downloads the script via API into `assets/engines/catalog/part_<id>/`
-
-At any prompt: **Y** = yes, **N** = no, **C** = cancel. Optionally opens the output folder in Explorer when done.
-
-See [README-CLI-AUDIO-EXPORT.md](README-CLI-AUDIO-EXPORT.md) for the full guide.
+See [README-CLI-AUDIO-EXPORT.md](README-CLI-AUDIO-EXPORT.md) for the full public guide.
 
 ## Usage
 
 ```powershell
-engine-sim-cli `
+.\build\Release\engine-sim-cli.exe `
   --engine assets/engines/kohler/kohler_ch750.mr `
   --engine-id kohler_ch750 `
-  --output ./export/kohler_ch750 `
+  --output out/kohler_ch750 `
   --steps 8 `
   --idle auto --redline auto `
   --clip-duration 1.0 `
@@ -49,76 +40,53 @@ engine-sim-cli `
 
 | Flag | Description |
 |------|-------------|
-| `--engine` | Path to engine `.mr` file (must expose `main` node) |
-| `--engine-id` | Output ID prefix (e.g. `v8` → `v8_2500_on.wav`) |
+| `--engine` | Path to engine `.mr` file |
+| `--engine-id` | Output ID prefix |
 | `--output` | Output directory |
-| `--steps N` | Evenly spaced RPM tiers from idle to redline (default 8), **rounded to nearest 100 rpm** |
-| `--rpms a,b,c` | Explicit RPM list (overrides `--steps`, no rounding) |
-| `--idle auto\|RPM` | Idle RPM (`auto` = engine dyno min) |
-| `--redline auto\|RPM` | Redline RPM (`auto` = engine redline) |
+| `--steps N` | RPM tiers idle→redline (rounded to 100 rpm) |
+| `--rpms a,b,c` | Explicit RPM list (overrides `--steps`) |
+| `--idle auto\|RPM` | Idle RPM |
+| `--redline auto\|RPM` | Redline RPM |
 | `--clip-duration` | Loop length in seconds (default 1.0) |
-| `--warmup` | Simulation warmup before capture (default 2.0 s) |
+| `--warmup` | Warmup before capture (default 2.0 s) |
 | `--sample-rate` | Output sample rate (default 44100) |
-| `--loop-mode crossfade` | Seamless loop via equal-power crossfade (~50 ms) |
-
-## MVP tiers
-
-| Phase | Tiers × throttle | WAV count |
-|-------|------------------|-----------|
-| MVP | 1 × 2 | 2 |
-| Full | 8 × 2 | 16 |
-
-Use `--steps 1` for MVP smoke tests.
+| `--loop-mode crossfade` | Seamless loop via crossfade (~50 ms) |
 
 ## manifest.json
+
+Optional metadata — not required at game runtime.
 
 ```json
 {
   "id": "kohler_ch750",
-  "idleRpm": 800,
-  "redline": 3600,
   "sampleRate": 44100,
   "clipDuration": 1.0,
   "loopMode": "crossfade",
+  "format": "NEODRIVE",
   "layers": [
-    { "rpm": 1000, "off": "kohler_ch750_1000_off.wav", "on": "kohler_ch750_1000_on.wav" },
-    { "rpm": 1400, "off": "kohler_ch750_1400_off.wav", "on": "kohler_ch750_1400_on.wav" }
+    { "rpm": 1000, "off": "kohler_ch750_1000_off.wav", "on": "kohler_ch750_1000_on.wav" }
   ]
 }
 ```
 
-## lil-drift integration
-
-Copy export output into the game assets tree:
-
-```powershell
-xcopy /E /I export\kohler_ch750 ..\lil-drift\src\assets\audio\engines\kohler_ch750
-cd ..\lil-drift
-node scripts/gen-engine-manifest.mjs --write
-```
-
-The script scans `src/assets/audio/engines/<id>/` and fills `ENGINE_SETS` in `src/lib/engineAudio.ts`. Runtime mixing is handled by `soundManager.ts` (NEODRIVE N-layer crossfade).
-
 ## Simulation details
-
-Export uses the same physics/audio path as the GUI:
 
 1. Dyno enabled + **RPM hold** at target tier
 2. Ignition enabled programmatically
-3. Throttle: `off` → `setSpeedControl(0.01)` / `setThrottle(0)`; `on` → full
-4. PCM read via `Simulator::readAudioOutput()` (internal ring buffer)
-5. Crossfade applied to loop boundaries for seamless playback
+3. Throttle off → `setSpeedControl(0.01)`; on → full
+4. PCM via `Simulator::readAudioOutput()`
+5. Crossfade at loop boundaries
 
 ## Tests
 
 ```powershell
-ctest --test-dir build -C Release -R CliExportGolden
+cmake --build build --config Release --target engine-sim-test
+.\build\Release\engine-sim-test.exe
 ```
-
-Golden test exports a single Kohler tier and verifies WAV + manifest structure.
 
 ## Out of scope
 
-- GUI, transmission gearing, vehicle drag tuning
-- macOS / Linux builds
-- WASAPI or external recorder capture
+- GUI, transmission gearing, vehicle drag
+- macOS / Linux
+- WASAPI / Audacity capture
+- Wankel (`wankel_engine`) catalog scripts
