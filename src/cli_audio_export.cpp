@@ -20,6 +20,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -352,6 +353,22 @@ void destroyLoaded(LoadedEngine &loaded) {
     }
 }
 
+int roundRpmToStep(int rpm, int step) {
+    if (step <= 1) return rpm;
+    return static_cast<int>(std::llround(static_cast<double>(rpm) / step) * step);
+}
+
+std::vector<int> dedupeAdjacentRpms(const std::vector<int> &rpms) {
+    std::vector<int> out;
+    out.reserve(rpms.size());
+    for (const int rpm : rpms) {
+        if (out.empty() || out.back() != rpm) {
+            out.push_back(rpm);
+        }
+    }
+    return out;
+}
+
 std::vector<int> resolveRpms(const ExportConfig &config, Engine *engine) {
     int idle = config.idleAuto
         ? static_cast<int>(units::toRpm(engine->getDynoMinSpeed()))
@@ -364,15 +381,25 @@ std::vector<int> resolveRpms(const ExportConfig &config, Engine *engine) {
         return config.rpms;
     }
 
+    constexpr int kRpmRoundStep = 100;
+    const int idleRounded = roundRpmToStep(idle, kRpmRoundStep);
+    const int redlineRounded = roundRpmToStep(redline, kRpmRoundStep);
+
     const int steps = std::max(1, config.steps);
     std::vector<int> rpms;
     rpms.reserve(static_cast<size_t>(steps));
     for (int i = 0; i < steps; ++i) {
         const double t = (steps == 1) ? 0.0 : static_cast<double>(i) / (steps - 1);
-        const int rpm = static_cast<int>(idle + t * (redline - idle));
-        rpms.push_back(rpm);
+        const int raw = static_cast<int>(idle + t * (redline - idle));
+        rpms.push_back(roundRpmToStep(raw, kRpmRoundStep));
     }
-    return rpms;
+
+    if (!rpms.empty()) {
+        rpms.front() = idleRounded;
+        rpms.back() = redlineRounded;
+    }
+
+    return dedupeAdjacentRpms(rpms);
 }
 
 bool writeManifest(

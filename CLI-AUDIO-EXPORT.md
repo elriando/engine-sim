@@ -13,6 +13,23 @@ Each RPM tier produces two files:
 {id}_{rpm}_on.wav    # throttle fully pressed
 ```
 
+## Interactive export (recommended)
+
+From the repo root:
+
+```cmd
+export-audio.cmd
+```
+
+Interactive menu:
+
+1. **Local** — lists every engine `.mr` under `assets/engines/`
+2. **Catalog** — paste a link from [catalog.engine-sim.parts](https://catalog.engine-sim.parts/) (e.g. `https://catalog.engine-sim.parts/parts/2531`); downloads the script via API into `assets/engines/catalog/part_<id>/`
+
+At any prompt: **Y** = yes, **N** = no, **C** = cancel. Optionally opens the output folder in Explorer when done.
+
+See [README-CLI-AUDIO-EXPORT.md](README-CLI-AUDIO-EXPORT.md) for the full guide.
+
 ## Usage
 
 ```powershell
@@ -35,8 +52,8 @@ engine-sim-cli `
 | `--engine` | Path to engine `.mr` file (must expose `main` node) |
 | `--engine-id` | Output ID prefix (e.g. `v8` → `v8_2500_on.wav`) |
 | `--output` | Output directory |
-| `--steps N` | Evenly spaced RPM tiers from idle to redline (default 8) |
-| `--rpms a,b,c` | Explicit RPM list (overrides `--steps`) |
+| `--steps N` | Evenly spaced RPM tiers from idle to redline (default 8), **rounded to nearest 100 rpm** |
+| `--rpms a,b,c` | Explicit RPM list (overrides `--steps`, no rounding) |
 | `--idle auto\|RPM` | Idle RPM (`auto` = engine dyno min) |
 | `--redline auto\|RPM` | Redline RPM (`auto` = engine redline) |
 | `--clip-duration` | Loop length in seconds (default 1.0) |
@@ -64,7 +81,8 @@ Use `--steps 1` for MVP smoke tests.
   "clipDuration": 1.0,
   "loopMode": "crossfade",
   "layers": [
-    { "rpm": 800, "off": "kohler_ch750_800_off.wav", "on": "kohler_ch750_800_on.wav" }
+    { "rpm": 1000, "off": "kohler_ch750_1000_off.wav", "on": "kohler_ch750_1000_on.wav" },
+    { "rpm": 1400, "off": "kohler_ch750_1400_off.wav", "on": "kohler_ch750_1400_on.wav" }
   ]
 }
 ```

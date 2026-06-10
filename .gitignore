@@ -16,3 +16,4 @@ export/
 out/
 error_log.log
 **/_cli_export_main.mr
+assets/engines/catalog/
