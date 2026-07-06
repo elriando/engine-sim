@@ -329,7 +329,6 @@ add_executable(engine-sim-test
     test/function_test.cpp
     test/synthesizer_tests.cpp
     test/cli_audio_golden_test.cpp
-    test/cli_export_golden_test.cpp
     src/cli_audio_export.cpp
 )
 

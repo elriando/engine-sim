@@ -30,6 +30,10 @@ struct ExportConfig {
     LoopMode loopMode = LoopMode::Crossfade;
     int crossfadeMs = 15;
     unsigned int randomSeed = 42;
+
+    // When > 0, render a single continuous idle->redline->idle rev sweep of this
+    // many seconds to "<id>_sweep.wav" instead of the tiered NEODRIVE set.
+    double sweepSeconds = 0.0;
 };
 
 struct ExportResult {

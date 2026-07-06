@@ -172,6 +172,65 @@ bool spinToRpm(
     return units::toRpm(engine->getSpeed()) >= targetRpm * 0.90;
 }
 
+// Continuous idle -> redline -> idle sweep captured as one PCM buffer.
+// RPM follows a half-sine so it eases in and out; full throttle on the way up,
+// closed throttle (engine braking) on the way down.
+std::vector<int16_t> captureSweep(
+    LoadedEngine &loaded,
+    double idleRpm,
+    double redlineRpm,
+    double durationSec,
+    int sampleRate)
+{
+    Engine *engine = loaded.engine;
+    Simulator *sim = loaded.simulator;
+
+    sim->m_dyno.m_enabled = true;
+    sim->m_dyno.m_hold = true;
+    engine->getIgnitionModule()->m_enabled = true;
+
+    // Bring the engine up to idle before we start recording.
+    spinToRpm(loaded, idleRpm, 1.0, 3.0, sampleRate);
+
+    const double frameDt = 1.0 / 60.0;
+    const int totalSamples = static_cast<int>(durationSec * sampleRate);
+    std::vector<int16_t> captured;
+    captured.reserve(static_cast<size_t>(totalSamples));
+
+    int nextProgress = 0;
+    while (static_cast<int>(captured.size()) < totalSamples) {
+        const double phase = static_cast<double>(captured.size()) / totalSamples; // 0..1
+        const double s = std::sin(3.14159265358979323846 * phase);                // 0..1..0
+        const double rpm = idleRpm + (redlineRpm - idleRpm) * s;
+        const double throttle = (phase < 0.5) ? 1.0 : 0.0;
+
+        sim->m_dyno.m_rotationSpeed = units::rpm(rpm);
+        engine->setSpeedControl(throttle);
+
+        sim->startFrame(frameDt);
+        while (sim->simulateStep()) {
+            engine->setSpeedControl(throttle);
+        }
+        sim->endFrame();
+
+        int16_t block[8192];
+        const int got = sim->readAudioOutput(
+            std::min(8192, totalSamples - static_cast<int>(captured.size())),
+            block);
+        captured.insert(captured.end(), block, block + got);
+
+        const int pct = static_cast<int>(phase * 100.0);
+        if (pct >= nextProgress) {
+            std::cout << "PROGRESS " << static_cast<int>(captured.size())
+                      << " " << totalSamples << std::endl;
+            nextProgress += 5;
+        }
+    }
+
+    captured.resize(static_cast<size_t>(totalSamples));
+    return captured;
+}
+
 std::vector<int16_t> capturePcm(
     LoadedEngine &loaded,
     double targetRpm,
@@ -501,6 +560,9 @@ bool parseArgs(int argc, char **argv, ExportConfig *config, std::string *usageEr
         else if (arg == "--crossfade-ms") {
             config->crossfadeMs = std::stoi(needValue("--crossfade-ms"));
         }
+        else if (arg == "--sweep") {
+            config->sweepSeconds = std::stod(needValue("--sweep"));
+        }
         else if (arg == "--seed") {
             config->randomSeed = static_cast<unsigned int>(std::stoul(needValue("--seed")));
         }
@@ -550,9 +612,46 @@ ExportResult runExport(const ExportConfig &config) {
         return result;
     }
 
+    // --- Rev-sweep preview mode: one continuous WAV, no tiers ---
+    if (config.sweepSeconds > 0.0) {
+        const int idle = config.idleAuto
+            ? static_cast<int>(units::toRpm(loaded.engine->getDynoMinSpeed()))
+            : config.idleRpm;
+        const int redline = config.redlineAuto
+            ? static_cast<int>(units::toRpm(loaded.engine->getRedline()))
+            : config.redlineRpm;
+
+        std::vector<int16_t> pcm = captureSweep(
+            loaded, idle, redline, config.sweepSeconds, config.sampleRate);
+
+        wav_io::WavData wav;
+        wav.sampleRate = config.sampleRate;
+        wav.channelCount = 1;
+        wav.bitsPerSample = 16;
+        wav.samples = std::move(pcm);
+
+        const std::string outPath = joinPath(config.outputDir, config.engineId + "_sweep.wav");
+        std::string wavError;
+        if (!wav_io::writePcm16Mono(outPath, wav, &wavError)) {
+            result.message = wavError;
+            destroyLoaded(loaded);
+            return result;
+        }
+
+        destroyLoaded(loaded);
+        result.writtenFiles.push_back(outPath);
+        result.success = true;
+        result.message = "rendered sweep (" + std::to_string(idle) + "-"
+            + std::to_string(redline) + " rpm)";
+        return result;
+    }
+
     const std::vector<int> rpms = resolveRpms(config, loaded.engine);
     const double throttleOff = 0.01;
     const double throttleOn = 1.0;
+
+    const int totalFiles = static_cast<int>(rpms.size()) * 2;
+    int doneFiles = 0;
 
     for (const int rpm : rpms) {
         for (int variant = 0; variant < 2; ++variant) {
@@ -587,6 +686,8 @@ ExportResult runExport(const ExportConfig &config) {
             }
 
             result.writtenFiles.push_back(outPath);
+            ++doneFiles;
+            std::cout << "PROGRESS " << doneFiles << " " << totalFiles << std::endl;
         }
     }
 
