@@ -20,6 +20,7 @@ Synthesizer::Synthesizer() {
 
     m_inputSampleRate = 0.0;
     m_audioSampleRate = 0.0;
+    m_renderSeed = 1;
 
     m_lastInputSampleOffset = 0.0;
 
@@ -41,6 +42,7 @@ void Synthesizer::initialize(const Parameters &p) {
     m_audioBufferSize = p.audioBufferSize;
     m_inputSampleRate = p.inputSampleRate;
     m_audioSampleRate = p.audioSampleRate;
+    m_renderSeed = p.renderSeed;
     m_audioParameters = p.initialAudioParameters;
 
     m_inputSamplesRead = 0;
@@ -70,7 +72,8 @@ void Synthesizer::initialize(const Parameters &p) {
             m_audioParameters.inputSampleNoiseFrequencyCutoff,
             m_audioSampleRate);
 
-        m_filters[i].antialiasing.setCutoffFrequency(1900.0f, m_audioSampleRate);
+        m_filters[i].antialiasing.setCutoffFrequency(
+            p.inputAntialiasCutoff, m_audioSampleRate);
     }
 
     m_levelingFilter.p_target = m_audioParameters.levelerTarget;
@@ -213,6 +216,12 @@ void Synthesizer::endInputBlock() {
 }
 
 void Synthesizer::audioRenderingThread() {
+    // rand() keeps its state per thread, so the noise generators in
+    // renderAudio() have to be seeded from here -- seeding on the caller's
+    // thread leaves this one on the default seed and makes renders
+    // irreproducible.
+    srand(m_renderSeed);
+
     while (m_run) {
         renderAudio();
     }
@@ -317,7 +326,13 @@ int16_t Synthesizer::renderAudio(int inputSample) {
 
     signal = m_antialiasing.fast_f(signal);
 
+    // The gain limits are refreshed here as well as in initialize() so callers
+    // can pin the leveler to a fixed gain through setAudioParameters(). The
+    // real-time application never changes them, so its behaviour is unchanged.
     m_levelingFilter.p_target = m_audioParameters.levelerTarget;
+    m_levelingFilter.p_maxLevel = m_audioParameters.levelerMaxGain;
+    m_levelingFilter.p_minLevel = m_audioParameters.levelerMinGain;
+
     const float v_leveled = m_levelingFilter.f(signal) * m_audioParameters.volume;
     int r_int = std::lround(v_leveled);
     if (r_int > INT16_MAX) {

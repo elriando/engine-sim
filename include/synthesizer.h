@@ -36,6 +36,19 @@ class Synthesizer {
             int audioBufferSize = 44100;
             float inputSampleRate = 10000;
             float audioSampleRate = 44100;
+
+            // Cutoff of the low-pass that suppresses the images left by
+            // up-sampling the simulator signal. The default is the value the
+            // real-time application has always used; offline rendering can open
+            // it up to 0.45 * inputSampleRate, which is what the simulation
+            // frequency actually supports.
+            float inputAntialiasCutoff = 1900.0f;
+
+            // Seed for the noise generators, applied on the rendering thread
+            // (rand() keeps per-thread state, so seeding from the caller has no
+            // effect on the renderer).
+            unsigned int renderSeed = 1;
+
             AudioParameters initialAudioParameters;
         };
 
@@ -109,6 +122,7 @@ class Synthesizer {
 
         float m_inputSampleRate;
         float m_audioSampleRate;
+        unsigned int m_renderSeed;
 
         std::thread *m_thread;
         std::atomic<bool> m_run;

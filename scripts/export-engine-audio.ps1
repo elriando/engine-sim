@@ -587,13 +587,17 @@ function Invoke-EngineExport([PSCustomObject]$Selection) {
         }
 
         # --- scope ---
+        # Tiers are spaced geometrically, so the interval between neighbours is
+        # constant in semitones. That is what decides how far the player has to
+        # pitch-shift between layers - the count alone does not.
         $scope = Read-Menu -Title "Export scope:" -Options @(
-            "Full  - 8 RPM tiers (16 WAV files)",
-            "Quick - 1 tier (2 WAV files)",
+            "Standard - 18 tiers, ~2 semitones apart (36 WAV files)",
+            "Hi-res   - 24 tiers, ~1.5 semitones apart (48 WAV files)",
+            "Quick    - 1 tier, for a fast check (2 WAV files)",
             "Cancel"
         )
-        if ($scope -lt 0 -or $scope -eq 2) { return 'cancel' }
-        $steps = if ($scope -eq 0) { 8 } else { 1 }
+        if ($scope -lt 0 -or $scope -eq 3) { return 'cancel' }
+        $steps = @(18, 24, 1)[$scope]
 
         $outputDir = Join-Path $RepoRoot ("out\" + $engineId)
         Write-Host ""
